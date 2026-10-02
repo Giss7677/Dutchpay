@@ -175,6 +175,22 @@
         .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translate(-50%, 10px); background: rgba(25,31,40,.92); color: #fff;
                  padding: 11px 18px; border-radius: 22px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity .25s, transform .25s; pointer-events: none; z-index: 10; white-space: nowrap; }
         .toast.show { opacity: 1; transform: translate(-50%, 0); }
+        .toast { z-index: 30; }
+
+        /* 하단 시트 */
+        .dim { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; opacity: 0; transition: opacity .2s; }
+        .dim[hidden] { display: none; }
+        .dim.show { opacity: 1; }
+        .sheet { width: 100%; max-width: 480px; background: var(--surface); border-radius: 24px 24px 0 0; padding: 24px max(20px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+                 transform: translateY(24px); transition: transform .2s ease; }
+        .dim.show .sheet { transform: none; }
+        .sheet h3 { margin: 0 0 6px; font-size: 19px; font-weight: 800; letter-spacing: -0.02em; }
+        .sheet p { margin: 0 0 16px; color: var(--sub); font-size: 14px; line-height: 1.5; }
+        .sheet textarea { display: block; width: 100%; height: 210px; border: 0; border-radius: 14px; background: var(--surface2); color: var(--ink); padding: 14px;
+                          font: inherit; font-size: 14px; line-height: 1.6; resize: none; outline: none; -webkit-user-select: text; user-select: text; }
+        .sheet .acts { display: flex; gap: 8px; margin-top: 16px; }
+        .sheet .acts .btn { flex: 1; }
+        .btn.danger { background: #F04452; }
 
         @media (max-width: 360px) {
             .app { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
@@ -199,6 +215,7 @@
     <div class="stepper" id="stepper"></div>
     <main id="view"></main>
 </div>
+<div id="dim" class="dim" hidden></div>
 <div id="toast" class="toast"></div>
 
 <script>
@@ -533,14 +550,94 @@ function toResult() {
     go('result');
 }
 
-function newSession() {
-    if (!confirm('새로 정산을 시작할까요?\n지금 정산은 지난 정산에 저장되어 있어요.')) return;
+async function newSession() {
+    if (!await ask('새로 정산을 시작할까요?', '지금 정산은 지난 정산에 저장되어 있어요.', '새로 시작')) return;
     S = fresh();
     persist();
     go('people');
 }
 
-async function share() {
+/* ===== 하단 시트 (팀즈 등 앱 내부 브라우저는 confirm/공유창이 막혀 있어 직접 구현) ===== */
+let sheetDone = null;
+const dim = () => document.getElementById('dim');
+
+function openSheet(html) {
+    const d = dim();
+    d.innerHTML = `<div class="sheet" role="dialog" aria-modal="true">${html}</div>`;
+    d.hidden = false;
+    requestAnimationFrame(() => d.classList.add('show'));
+}
+
+function closeSheet(result) {
+    const d = dim();
+    d.classList.remove('show');
+    setTimeout(() => { if (!d.classList.contains('show')) { d.hidden = true; d.innerHTML = ''; } }, 200);
+    if (sheetDone) { const f = sheetDone; sheetDone = null; f(result); }
+}
+
+function ask(title, msg, ok, danger) {
+    return new Promise(res => {
+        sheetDone = res;
+        openSheet(`
+            <h3>${esc(title)}</h3>${msg ? `<p>${esc(msg)}</p>` : ''}
+            <div class="acts">
+                <button class="btn soft" data-sheet="no">취소</button>
+                <button class="btn ${danger ? 'danger' : ''}" data-sheet="yes">${esc(ok || '확인')}</button>
+            </div>`);
+    });
+}
+
+async function copyText(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+    } catch (e) {}
+    // 예전 방식 복사 (iOS 웹뷰 대응: 화면에 보이는 textarea를 선택해서 복사)
+    const ta = document.getElementById('shareText');
+    if (!ta) return false;
+    let ok = false;
+    try {
+        ta.readOnly = false;
+        ta.focus();
+        ta.setSelectionRange(0, ta.value.length);
+        ok = document.execCommand('copy');
+    } catch (e) {}
+    ta.readOnly = true;
+    if (ok) ta.blur();
+    return ok;
+}
+
+let shareText = '';
+
+function share() {
+    shareText = buildShareText();
+    openSheet(`
+        <h3>정산 결과 공유</h3>
+        <p>복사해서 카톡·팀즈 대화창에 붙여넣으세요.</p>
+        <textarea id="shareText" readonly>${esc(shareText)}</textarea>
+        <div class="acts">
+            ${navigator.share ? '<button class="btn soft" data-sheet="native">다른 앱으로</button>' : ''}
+            <button class="btn" data-sheet="copy">복사하기</button>
+        </div>`);
+}
+
+async function onSheetAction(act) {
+    if (act === 'yes') return closeSheet(true);
+    if (act === 'no') return closeSheet(false);
+    if (act === 'copy') {
+        if (await copyText(shareText)) { closeSheet(); toast('복사했어요. 대화창에 붙여넣기 하세요'); }
+        else {
+            const ta = document.getElementById('shareText');
+            ta.focus(); ta.select();
+            toast('글자를 길게 눌러 복사해주세요');
+        }
+    }
+    if (act === 'native') {
+        try { await navigator.share({ text: shareText }); closeSheet(); }
+        catch (e) { if (e.name !== 'AbortError') toast('여기서는 공유가 막혀 있어요. 복사하기를 눌러주세요'); }
+    }
+}
+
+function buildShareText() {
     const c = compute(), u = S.unit;
     const account = load(K.account, '').trim();
     const places = S.rounds.filter(r => r.amount).map(r => r.place).filter(Boolean);
@@ -557,24 +654,14 @@ async function share() {
         ...S.members.map(m => `${m}  ${fmt(roundUp(c.share[m], u))}원`)
     ];
     if (/^https?:/.test(location.href)) lines.push('', `계산기 👉 ${location.origin}${location.pathname}`);
-    const text = lines.filter(l => l !== null).join('\n');
-
-    if (navigator.share) {
-        try { await navigator.share({ text }); return; }
-        catch (e) { if (e.name === 'AbortError') return; }
-    }
-    try {
-        await navigator.clipboard.writeText(text);
-    } catch (e) {
-        const ta = document.createElement('textarea');
-        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-    }
-    toast('복사했어요. 카톡에 붙여넣기 하세요');
+    return lines.filter(l => l !== null).join('\n');
 }
 
 /* ===== 이벤트 ===== */
 document.addEventListener('click', e => {
+    if (e.target.id === 'dim') return closeSheet(false);   // 바깥 어두운 곳 터치 → 닫기
+    const sb = e.target.closest('[data-sheet]');
+    if (sb) return onSheetAction(sb.dataset.sheet);
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const { act, name, id, to } = b.dataset;
@@ -613,13 +700,20 @@ document.addEventListener('click', e => {
             S = { id: h.id, screen: 'result', prev: 'people', members: [...h.members], rounds: h.rounds, unit: h.unit || 1 };
             go('result'); break;
         }
-        case 'del-rec':
-            if (!confirm('이 기록을 삭제할까요?')) break;
-            store(K.history, load(K.history, []).filter((h, k) => id ? h.id !== id : k !== +b.dataset.ix));
-            render(); break;
+        case 'del-rec': {
+            const ix = +b.dataset.ix;
+            ask('이 기록을 삭제할까요?', '', '삭제', true).then(ok => {
+                if (!ok) return;
+                store(K.history, load(K.history, []).filter((h, k) => id ? h.id !== id : k !== ix));
+                render();
+            });
+            break;
+        }
         case 'clear':
-            if (!confirm('모든 정산 기록을 삭제할까요?\n(최근 함께한 사람 목록은 남아요)')) break;
-            store(K.history, []); render(); break;
+            ask('모든 정산 기록을 삭제할까요?', '최근 함께한 사람 목록은 남아요.', '전체 삭제', true).then(ok => {
+                if (ok) { store(K.history, []); render(); }
+            });
+            break;
     }
 });
 
