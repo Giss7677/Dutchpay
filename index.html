@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>스마트 더치페이</title>
+    <meta name="description" content="여러 차수 모임 비용을 참석자별로 나눠 계산하는 더치페이 기록기">
+    <meta name="theme-color" content="#007AFF">
+    <meta name="format-detection" content="telephone=no">
+    <!-- 홈 화면에 추가 (iOS / Android) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="더치페이">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icon-180.png">
+    <style>
+        :root { --primary: #007AFF; --bg: #F2F2F7; --card: #FFFFFF; --text: #1C1C1E; --sub: #666; --line: #E5E5EA; --soft: #F9F9FB; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+            background-color: var(--bg); color: var(--text); margin: 0;
+            min-height: 100vh; min-height: 100dvh;
+            /* 노치/홈 인디케이터 영역 피하기 */
+            padding: max(15px, env(safe-area-inset-top)) max(15px, env(safe-area-inset-right)) max(15px, env(safe-area-inset-bottom)) max(15px, env(safe-area-inset-left));
+            display: flex; justify-content: center; align-items: flex-start;
+            overscroll-behavior-y: none;
+        }
+        .container { width: 100%; max-width: 450px; background: var(--card); border-radius: 20px; padding: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); position: relative; }
+        .step { display: none; }
+        .step.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        h2 { font-size: 1.3rem; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .guide-text { font-size: 0.85rem; color: #444; margin-bottom: 15px; background: #E8F2FF; padding: 12px; border-radius: 10px; line-height: 1.6; border-left: 4px solid var(--primary); }
+
+        /* iOS는 16px 미만 입력창에서 자동 확대되므로 16px 유지 */
+        input[type=text], input[type=number] { width: 100%; padding: 14px; margin: 8px 0; border: 1.5px solid var(--line); border-radius: 12px; font-size: 16px; outline: none; background: #fff; color: var(--text); -webkit-appearance: none; appearance: none; }
+        input:focus { border-color: var(--primary); }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        button { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; margin-top: 10px; touch-action: manipulation; cursor: pointer; font-family: inherit; -webkit-appearance: none; appearance: none; }
+        button:active { opacity: 0.7; }
+        .btn-row { display: flex; gap: 8px; }
+        .btn-row button { flex: 1; }
+        .btn-gray { background: #8E8E93; }
+        .btn-dark { background: #333; }
+        .btn-green { background: #2ecc71; }
+
+        /* 멤버 태그 */
+        .member-tag { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: white; padding: 6px 6px 6px 12px; border-radius: 15px; margin: 4px; font-size: 14px; font-weight: 500; }
+        .member-tag .x { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.25); font-size: 12px; cursor: pointer; }
+
+        /* 저장된 멤버 */
+        .recent-member { display: inline-flex; align-items: center; background: #fff; color: #333; border: 1px solid #ccc; border-radius: 15px; margin: 4px; font-size: 14px; overflow: hidden; }
+        .recent-member .add { padding: 7px 10px 7px 12px; cursor: pointer; }
+        .recent-member .del { padding: 7px 10px; color: #aaa; border-left: 1px solid #eee; cursor: pointer; }
+        .recent-member .add:active, .recent-member .del:active { background: #eee; }
+        .recent-member.added { opacity: 0.4; }
+
+        .round-card { background: var(--soft); border-radius: 15px; padding: 15px; margin-bottom: 15px; border: 1px solid #EEEEEF; }
+        .attendee-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
+        .check-label { display: flex; align-items: center; background: #fff; padding: 12px 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; cursor: pointer; word-break: break-all; }
+        .check-label input { width: 20px; height: 20px; margin: 0 8px 0 0; flex-shrink: 0; accent-color: var(--primary); }
+        .result-item { padding: 15px; border-bottom: 1px solid #eee; }
+        .result-item:last-child { border-bottom: none; }
+        .calc-detail { font-size: 0.75rem; color: #888; display: block; margin-top: 5px; line-height: 1.4; word-break: keep-all; }
+        .total-line { padding: 15px; background: var(--soft); border-radius: 15px 15px 0 0; display: flex; justify-content: space-between; font-weight: 600; }
+
+        /* 히스토리 */
+        .history-btn { background: none; color: var(--primary); font-size: 0.9rem; padding: 8px 0 8px 8px; width: auto; margin: 0; font-weight: bold; white-space: nowrap; }
+        .history-card { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 15px; margin-bottom: 12px; }
+        .history-date { font-size: 0.8rem; color: #888; margin-bottom: 8px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
+        .muted { color: #aaa; font-size: 0.85rem; }
+
+        .toast { position: fixed; left: 50%; bottom: calc(30px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10; }
+        .toast.show { opacity: 1; }
+
+        /* 아주 작은 화면 (iPhone SE 등) */
+        @media (max-width: 360px) {
+            body { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+            .container { padding: 15px; border-radius: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="step1" class="step active">
+        <h2>
+            👥 참가자 등록
+            <button type="button" class="history-btn" onclick="showHistory()">📜 이전 기록</button>
+        </h2>
+
+        <div style="margin-bottom: 15px; min-height: 20px;">
+            <div style="font-size: 0.8rem; color: var(--sub); margin-bottom: 5px;">자주 함께하는 멤버 (이름 터치 = 추가, ✕ = 목록에서 삭제)</div>
+            <div id="dbMemberList"></div>
+        </div>
+
+        <form id="addMemberForm" style="display:flex; gap:8px; align-items:center;">
+            <input type="text" id="nameInput" placeholder="새로운 이름 직접 입력" autocomplete="off" enterkeyhint="done" maxlength="20">
+            <button type="submit" style="width:72px; flex-shrink:0; margin-top:0;">추가</button>
+        </form>
+
+        <div style="margin-top:15px; min-height:44px; padding: 10px; background: #f9f9f9; border-radius: 10px;">
+            <span class="muted">현재 참여자: </span>
+            <span id="memberList"></span>
+        </div>
+
+        <button id="nextBtn" class="btn-dark" onclick="nextStep(2)" style="display:none; margin-top:20px;">다음 단계 (차수 설정) ➔</button>
+    </div>
+
+    <div id="step2" class="step">
+        <h2>🍻 차수 설정</h2>
+        <div class="guide-text">총 몇 차까지 정산하시나요? (1~20)</div>
+        <form id="roundForm">
+            <input type="number" id="roundInput" placeholder="예: 2" inputmode="numeric" pattern="[0-9]*" min="1" max="20" enterkeyhint="next">
+            <button type="submit">세부 내역 입력 ➔</button>
+        </form>
+        <button type="button" class="btn-gray" onclick="nextStep(1)">← 참가자 수정</button>
+    </div>
+
+    <div id="step3" class="step">
+        <h2>💰 상세 내역 입력</h2>
+        <div id="roundContainer"></div>
+        <button onclick="calculateFinal()">최종 결과 확인 및 저장</button>
+        <button type="button" class="btn-gray" onclick="nextStep(2)">← 차수 수정</button>
+    </div>
+
+    <div id="step4" class="step">
+        <h2>📊 정산 결과</h2>
+        <div class="guide-text" style="background:#e8f8f5; border-left-color:#2ecc71;">✅ 결과가 이 기기에 자동 저장되었습니다.</div>
+        <div id="resultArea" style="background: #fff; border-radius:15px; border:1px solid #eee;"></div>
+        <button class="btn-green" onclick="shareResult()" style="margin-top:20px;">📤 결과 공유하기 (카톡 등)</button>
+        <button class="btn-gray" onclick="location.reload()">새로운 정산하기</button>
+    </div>
+
+    <div id="stepHistory" class="step">
+        <h2>📜 이전 정산 기록</h2>
+        <div id="historyContainer" style="margin-top: 15px;"></div>
+        <button class="btn-dark" onclick="nextStep(1)" style="margin-top:20px;">← 돌아가기</button>
+        <button onclick="clearHistory()" style="background:none; color:#e74c3c; font-size:0.9rem; margin-top:10px;">기록 전체 삭제</button>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+    let members = [];
+    let lastShareText = '';
+
+    /* --- 공통 유틸 --- */
+    // 이름에 <, & 등이 들어가도 화면이 깨지지 않도록 처리
+    function esc(s) {
+        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    // 사파리 개인정보 보호 모드 등에서 저장소가 막혀도 앱이 멈추지 않도록 처리
+    function load(key) {
+        try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; }
+    }
+    function save(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { toast('이 브라우저에서는 저장이 되지 않습니다'); }
+    }
+    function toast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => t.classList.remove('show'), 2000);
+    }
+    const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
+
+    document.addEventListener('DOMContentLoaded', loadSavedMembers);
+
+    /* --- 저장된 멤버 --- */
+    function saveMemberToDB(name) {
+        const db = load('dutch_members');
+        if (!db.includes(name)) { db.push(name); save('dutch_members', db); }
+    }
+
+    function deleteMemberFromDB(name) {
+        if (!confirm(`'${name}'을(를) 자주 함께하는 멤버에서 지울까요?`)) return;
+        save('dutch_members', load('dutch_members').filter(n => n !== name));
+        loadSavedMembers();
+    }
+
+    function loadSavedMembers() {
+        const db = load('dutch_members');
+        const list = document.getElementById('dbMemberList');
+        list.innerHTML = '';
+
+        if (db.length === 0) {
+            list.innerHTML = '<span class="muted">저장된 멤버가 없습니다.</span>';
+            return;
+        }
+
+        db.forEach(name => {
+            const chip = document.createElement('span');
+            chip.className = 'recent-member' + (members.includes(name) ? ' added' : '');
+            const add = document.createElement('span');
+            add.className = 'add';
+            add.textContent = '+ ' + name;
+            add.onclick = () => processAddingMember(name);
+            const del = document.createElement('span');
+            del.className = 'del';
+            del.textContent = '✕';
+            del.onclick = () => deleteMemberFromDB(name);
+            chip.append(add, del);
+            list.appendChild(chip);
+        });
+    }
+
+    /* --- 참여자 추가/삭제 --- */
+    document.getElementById('addMemberForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const input = document.getElementById('nameInput');
+        const name = input.value.trim();
+        if (!name) return;
+        if (members.includes(name)) toast('이미 추가된 이름입니다');
+        processAddingMember(name);
+        input.value = '';
+        input.focus(); // 연속 입력 편하게 키보드 유지
+    });
+
+    function processAddingMember(name) {
+        if (!name || members.includes(name)) return;
+        members.push(name);
+        saveMemberToDB(name);
+        renderMembers();
+    }
+
+    function removeMember(name) {
+        members = members.filter(m => m !== name);
+        renderMembers();
+    }
+
+    function renderMembers() {
+        const list = document.getElementById('memberList');
+        list.innerHTML = '';
+        members.forEach(name => {
+            const tag = document.createElement('span');
+            tag.className = 'member-tag';
+            tag.appendChild(document.createTextNode(name));
+            const x = document.createElement('span');
+            x.className = 'x';
+            x.textContent = '✕';
+            x.onclick = () => removeMember(name);
+            tag.appendChild(x);
+            list.appendChild(tag);
+        });
+        document.getElementById('nextBtn').style.display = members.length > 0 ? 'block' : 'none';
+        loadSavedMembers();
+    }
+
+    /* --- 스텝 이동 --- */
+    function nextStep(n) {
+        if (document.activeElement) document.activeElement.blur(); // 키보드 닫기
+        document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+        if (n === 'history') {
+            document.getElementById('stepHistory').classList.add('active');
+            renderHistory();
+        } else {
+            document.getElementById('step' + n).classList.add('active');
+        }
+        window.scrollTo(0, 0);
+    }
+
+    /* --- 2, 3단계 --- */
+    document.getElementById('roundForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        setupRounds();
+    });
+
+    function setupRounds() {
+        const count = parseInt(document.getElementById('roundInput').value, 10);
+        if (!count || count < 1 || count > 20) return alert('차수를 1~20 사이로 입력해주세요.');
+
+        // 이미 입력해 둔 값은 차수를 다시 설정해도 유지
+        const prev = Array.from(document.querySelectorAll('.round-card')).map(card => ({
+            note: card.querySelector('.r-note').value,
+            amount: card.querySelector('.r-amount').value,
+            checked: Array.from(card.querySelectorAll('.r-check:checked')).map(c => c.value)
+        }));
+
+        let html = '';
+        for (let i = 1; i <= count; i++) {
+            const p = prev[i - 1];
+            html += `
+                <div class="round-card">
+                    <strong>📍 ${i}차 정보</strong>
+                    <input type="text" class="r-note" placeholder="장소/항목 (예: 고깃집, 카페)" value="${p ? esc(p.note) : ''}" enterkeyhint="next">
+                    <input type="number" class="r-amount" placeholder="총 금액 (원)" inputmode="numeric" pattern="[0-9]*" min="0" value="${p ? esc(p.amount) : ''}" enterkeyhint="done">
+                    <div class="attendee-grid">
+                        ${members.map(m => `
+                            <label class="check-label">
+                                <input type="checkbox" class="r-check" value="${esc(m)}" ${!p || p.checked.includes(m) ? 'checked' : ''}> ${esc(m)}
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>`;
+        }
+        document.getElementById('roundContainer').innerHTML = html;
+        nextStep(3);
+    }
+
+    /* --- 4단계: 계산 및 저장 --- */
+    function calculateFinal() {
+        const personalTotal = {};
+        const personalDetails = {};
+        let totalAmountSpent = 0;
+
+        members.forEach(m => { personalTotal[m] = 0; personalDetails[m] = []; });
+
+        document.querySelectorAll('.round-card').forEach((card, idx) => {
+            const note = card.querySelector('.r-note').value.trim() || `${idx + 1}차`;
+            const amount = parseFloat(card.querySelector('.r-amount').value) || 0;
+            const attendees = Array.from(card.querySelectorAll('.r-check:checked')).map(c => c.value);
+
+            if (attendees.length > 0 && amount > 0) {
+                totalAmountSpent += amount;
+                const perPerson = amount / attendees.length;
+                attendees.forEach(a => {
+                    personalTotal[a] += perPerson;
+                    personalDetails[a].push(`${note}:${won(perPerson)}`);
+                });
+            }
+        });
+
+        if (totalAmountSpent <= 0) return alert('금액을 하나 이상 입력하고, 참석자를 체크해주세요.');
+
+        const record = {
+            date: new Date().toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+            totalSpent: totalAmountSpent,
+            results: []
+        };
+
+        let html = `<div class="total-line"><span>총 사용 금액</span><span>${won(totalAmountSpent)}</span></div>`;
+        const lines = [`💸 더치페이 정산 (${record.date})`, `총 ${won(totalAmountSpent)}`, ''];
+
+        members.forEach(m => {
+            const total = Math.round(personalTotal[m]);
+            const detailStr = personalDetails[m].length > 0 ? `(${personalDetails[m].join(' + ')})` : '(참여 없음)';
+            if (total > 0) {
+                record.results.push({ name: m, total: total, detail: detailStr });
+                lines.push(`${m}: ${won(total)} ${detailStr}`);
+            }
+            html += `
+                <div class="result-item">
+                    <div style="display:flex; justify-content:space-between; gap:10px;">
+                        <strong>${esc(m)}</strong>
+                        <span style="color:var(--primary); font-weight:bold; white-space:nowrap;">${won(total)}</span>
+                    </div>
+                    <span class="calc-detail">${esc(detailStr)}</span>
+                </div>`;
+        });
+
+        document.getElementById('resultArea').innerHTML = html;
+        lastShareText = lines.join('\n');
+
+        const history = load('dutch_history');
+        history.unshift(record);
+        save('dutch_history', history);
+
+        nextStep(4);
+    }
+
+    /* --- 결과 공유 (모바일 공유 시트 → 안 되면 복사) --- */
+    async function shareResult() {
+        if (navigator.share) {
+            try { await navigator.share({ title: '더치페이 정산 결과', text: lastShareText }); return; }
+            catch (e) { if (e.name === 'AbortError') return; }
+        }
+        try {
+            await navigator.clipboard.writeText(lastShareText);
+            toast('결과가 복사되었습니다. 카톡에 붙여넣기 하세요');
+        } catch (e) {
+            const ta = document.createElement('textarea');
+            ta.value = lastShareText;
+            ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+            toast('결과가 복사되었습니다');
+        }
+    }
+
+    /* --- 히스토리 --- */
+    function showHistory() { nextStep('history'); }
+
+    function renderHistory() {
+        const container = document.getElementById('historyContainer');
+        const history = load('dutch_history');
+
+        if (history.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#888;">저장된 기록이 없습니다.</p>';
+            return;
+        }
+
+        container.innerHTML = history.map(record => `
+            <div class="history-card">
+                <div class="history-date">🕒 ${esc(record.date)} (총 ${won(record.totalSpent)})</div>
+                ${record.results.map(r => `
+                    <div style="display:flex; justify-content:space-between; font-size:14px; margin-top:5px;">
+                        <span>${esc(r.name)}</span>
+                        <strong>${won(r.total)}</strong>
+                    </div>
+                `).join('')}
+            </div>
+        `).join('');
+    }
+
+    function clearHistory() {
+        if (confirm('정말 모든 정산 기록을 삭제하시겠습니까? (멤버 목록은 유지됩니다)')) {
+            try { localStorage.removeItem('dutch_history'); } catch (e) {}
+            renderHistory();
+        }
+    }
+</script>
+</body>
+</html>
