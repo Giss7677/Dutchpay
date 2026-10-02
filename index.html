@@ -3,420 +3,653 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>스마트 더치페이</title>
-    <meta name="description" content="여러 차수 모임 비용을 참석자별로 나눠 계산하는 더치페이 기록기">
-    <meta name="theme-color" content="#007AFF">
+    <title>1/N 스마트 정산</title>
+    <meta name="description" content="누가 얼마 냈는지만 입력하면, 누가 누구에게 얼마 보내면 되는지 알려주는 스마트 더치페이">
+    <meta name="theme-color" content="#F4F5F7" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0F1115" media="(prefers-color-scheme: dark)">
     <meta name="format-detection" content="telephone=no">
-    <!-- 홈 화면에 추가 (iOS / Android) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="더치페이">
+    <meta name="apple-mobile-web-app-title" content="1/N">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="icon-180.png">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
     <style>
-        :root { --primary: #007AFF; --bg: #F2F2F7; --card: #FFFFFF; --text: #1C1C1E; --sub: #666; --line: #E5E5EA; --soft: #F9F9FB; }
+        :root {
+            --bg: #F4F5F7; --surface: #FFFFFF; --surface2: #F2F4F6;
+            --ink: #191F28; --sub: #6B7684; --faint: #B0B8C1; --line: #EAEDF0;
+            --accent: #3B5BFD; --fill: #3B5BFD; --accent-soft: #EDF0FF;
+            --pos: #0CA678; --pos-soft: #E6F7F1;
+            --shadow: 0 1px 2px rgba(17,24,39,.04), 0 6px 20px rgba(17,24,39,.05);
+            color-scheme: light;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0F1115; --surface: #1A1D23; --surface2: #24282F;
+                --ink: #F2F4F6; --sub: #9AA4B1; --faint: #5C6470; --line: #2A2E36;
+                --accent: #8197FF; --fill: #4560F5; --accent-soft: #232A4A;
+                --pos: #38D9A9; --pos-soft: #16302A;
+                --shadow: none;
+                color-scheme: dark;
+            }
+        }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
-            background-color: var(--bg); color: var(--text); margin: 0;
-            min-height: 100vh; min-height: 100dvh;
-            /* 노치/홈 인디케이터 영역 피하기 */
-            padding: max(15px, env(safe-area-inset-top)) max(15px, env(safe-area-inset-right)) max(15px, env(safe-area-inset-bottom)) max(15px, env(safe-area-inset-left));
-            display: flex; justify-content: center; align-items: flex-start;
-            overscroll-behavior-y: none;
+            margin: 0; background: var(--bg); color: var(--ink);
+            font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+            letter-spacing: -0.01em; -webkit-font-smoothing: antialiased;
         }
-        .container { width: 100%; max-width: 450px; background: var(--card); border-radius: 20px; padding: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.08); position: relative; }
-        .step { display: none; }
-        .step.active { display: block; animation: fadeIn 0.3s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
 
-        h2 { font-size: 1.3rem; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-        .guide-text { font-size: 0.85rem; color: #444; margin-bottom: 15px; background: #E8F2FF; padding: 12px; border-radius: 10px; line-height: 1.6; border-left: 4px solid var(--primary); }
+        .app { max-width: 480px; margin: 0 auto; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column;
+               padding: 0 max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left)); }
 
-        /* iOS는 16px 미만 입력창에서 자동 확대되므로 16px 유지 */
-        input[type=text], input[type=number] { width: 100%; padding: 14px; margin: 8px 0; border: 1.5px solid var(--line); border-radius: 12px; font-size: 16px; outline: none; background: #fff; color: var(--text); -webkit-appearance: none; appearance: none; }
-        input:focus { border-color: var(--primary); }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        button { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; margin-top: 10px; touch-action: manipulation; cursor: pointer; font-family: inherit; -webkit-appearance: none; appearance: none; }
-        button:active { opacity: 0.7; }
-        .btn-row { display: flex; gap: 8px; }
-        .btn-row button { flex: 1; }
-        .btn-gray { background: #8E8E93; }
-        .btn-dark { background: #333; }
-        .btn-green { background: #2ecc71; }
+        /* 헤더 */
+        header { display: flex; align-items: center; justify-content: space-between; padding: calc(14px + env(safe-area-inset-top)) 0 6px; }
+        .brand { display: flex; align-items: center; gap: 10px; }
+        .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--fill); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 800; letter-spacing: -0.04em; }
+        .brand b { display: block; font-size: 16px; font-weight: 800; line-height: 1.1; }
+        .brand small { display: block; font-size: 11px; color: var(--sub); font-weight: 500; }
+        .pill { border: 0; background: var(--surface); height: 36px; padding: 0 14px; border-radius: 18px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--shadow); }
+        .pill svg { width: 15px; height: 15px; }
 
-        /* 멤버 태그 */
-        .member-tag { display: inline-flex; align-items: center; gap: 6px; background: var(--primary); color: white; padding: 6px 6px 6px 12px; border-radius: 15px; margin: 4px; font-size: 14px; font-weight: 500; }
-        .member-tag .x { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(255,255,255,0.25); font-size: 12px; cursor: pointer; }
+        /* 진행 단계 */
+        .stepper { display: flex; gap: 6px; margin: 14px 0 26px; }
+        .stepper div { flex: 1; }
+        .stepper i { display: block; height: 4px; border-radius: 2px; background: var(--line); transition: background .3s; }
+        .stepper .on i { background: var(--fill); }
+        .stepper span { display: block; font-size: 11px; color: var(--faint); margin-top: 7px; font-weight: 600; }
+        .stepper .on span { color: var(--ink); }
+        .stepper.hide { display: none; }
 
-        /* 저장된 멤버 */
-        .recent-member { display: inline-flex; align-items: center; background: #fff; color: #333; border: 1px solid #ccc; border-radius: 15px; margin: 4px; font-size: 14px; overflow: hidden; }
-        .recent-member .add { padding: 7px 10px 7px 12px; cursor: pointer; }
-        .recent-member .del { padding: 7px 10px; color: #aaa; border-left: 1px solid #eee; cursor: pointer; }
-        .recent-member .add:active, .recent-member .del:active { background: #eee; }
-        .recent-member.added { opacity: 0.4; }
+        main { flex: 1; animation: fade .25s ease; }
+        @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        h1 { font-size: 25px; line-height: 1.35; margin: 0 0 8px; font-weight: 800; letter-spacing: -0.035em; }
+        .lead { color: var(--sub); font-size: 14px; margin: 0 0 22px; line-height: 1.55; }
 
-        .round-card { background: var(--soft); border-radius: 15px; padding: 15px; margin-bottom: 15px; border: 1px solid #EEEEEF; }
-        .attendee-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
-        .check-label { display: flex; align-items: center; background: #fff; padding: 12px 10px; border-radius: 10px; border: 1px solid #ddd; font-size: 14px; cursor: pointer; word-break: break-all; }
-        .check-label input { width: 20px; height: 20px; margin: 0 8px 0 0; flex-shrink: 0; accent-color: var(--primary); }
-        .result-item { padding: 15px; border-bottom: 1px solid #eee; }
-        .result-item:last-child { border-bottom: none; }
-        .calc-detail { font-size: 0.75rem; color: #888; display: block; margin-top: 5px; line-height: 1.4; word-break: keep-all; }
-        .total-line { padding: 15px; background: var(--soft); border-radius: 15px 15px 0 0; display: flex; justify-content: space-between; font-weight: 600; }
+        .card { background: var(--surface); border-radius: 22px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 12px; }
+        .label { font-size: 13px; color: var(--sub); font-weight: 600; margin: 0 0 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .label .count { color: var(--accent); }
 
-        /* 히스토리 */
-        .history-btn { background: none; color: var(--primary); font-size: 0.9rem; padding: 8px 0 8px 8px; width: auto; margin: 0; font-weight: bold; white-space: nowrap; }
-        .history-card { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 15px; margin-bottom: 12px; }
-        .history-date { font-size: 0.8rem; color: #888; margin-bottom: 8px; border-bottom: 1px dashed #eee; padding-bottom: 5px; }
-        .muted { color: #aaa; font-size: 0.85rem; }
+        /* 입력 */
+        .field { display: flex; gap: 8px; }
+        input.text { flex: 1; min-width: 0; width: 100%; height: 52px; border: 0; border-radius: 14px; background: var(--surface2); padding: 0 16px;
+                     font: inherit; font-size: 16px; color: var(--ink); outline: none; box-shadow: inset 0 0 0 1.5px transparent; transition: box-shadow .15s; -webkit-appearance: none; appearance: none; }
+        input.text:focus { box-shadow: inset 0 0 0 1.5px var(--accent); }
+        input::placeholder { color: var(--faint); }
 
-        .toast { position: fixed; left: 50%; bottom: calc(30px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 10; }
-        .toast.show { opacity: 1; }
+        .btn { height: 54px; border: 0; border-radius: 16px; background: var(--fill); color: #fff; font-size: 16px; font-weight: 700; padding: 0 20px; transition: transform .1s, opacity .2s; white-space: nowrap; }
+        .btn:active { transform: scale(.97); }
+        .btn:disabled { opacity: .35; transform: none; }
+        .btn.ghost { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+        .btn.soft { background: var(--surface2); color: var(--ink); }
+        .btn.block { width: 100%; }
+        .btn.sm { height: 52px; padding: 0 18px; font-size: 15px; }
+        .linkbtn { border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 600; padding: 4px 2px; }
+        .linkbtn.muted { color: var(--sub); }
 
-        /* 아주 작은 화면 (iPhone SE 등) */
+        /* 칩 */
+        .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .chip { border: 0; height: 38px; padding: 0 14px; border-radius: 19px; background: var(--surface2); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: background .15s, color .15s; }
+        .chip.on { background: var(--fill); color: #fff; }
+        .chip.soft { background: var(--accent-soft); color: var(--accent); }
+        .chip.off { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line); color: var(--faint); }
+        .chip .x { opacity: .65; font-size: 11px; }
+        .empty { color: var(--faint); font-size: 14px; padding: 8px 0; }
+
+        /* 하단 고정 버튼 */
+        .cta { position: sticky; bottom: 0; display: flex; gap: 8px; margin-top: 8px;
+               padding: 16px 0 calc(16px + env(safe-area-inset-bottom));
+               background: linear-gradient(to top, var(--bg) 70%, rgba(0,0,0,0)); }
+        .cta .btn { flex: 1; }
+        .cta .btn.ghost { flex: 0 0 auto; }
+
+        /* 지출 카드 */
+        .round-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .badge { font-size: 12px; font-weight: 800; color: var(--accent); background: var(--accent-soft); padding: 5px 10px; border-radius: 10px; }
+        .amount-wrap { display: flex; align-items: baseline; gap: 4px; border-bottom: 2px solid var(--line); padding: 6px 0 8px; margin: 10px 0 4px; transition: border-color .15s; }
+        .amount-wrap:focus-within { border-color: var(--accent); }
+        input.amount { flex: 1; min-width: 0; width: 100%; border: 0; background: none; font: inherit; font-size: 30px; font-weight: 800; color: var(--ink); outline: none; padding: 0; letter-spacing: -0.03em; border-radius: 0; -webkit-appearance: none; appearance: none; }
+        .amount-wrap span { font-size: 20px; font-weight: 700; color: var(--sub); }
+        .sub-label { font-size: 12px; color: var(--sub); font-weight: 600; margin: 18px 0 9px; display: flex; justify-content: space-between; align-items: center; }
+        .per { font-size: 13px; color: var(--sub); margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line); display: flex; justify-content: space-between; }
+        .per b { color: var(--ink); }
+        .per:empty { display: none; }
+
+        /* 결과 */
+        .hero { background: var(--fill); color: #fff; border-radius: 24px; padding: 22px; margin-bottom: 12px; }
+        .hero .t { font-size: 13px; opacity: .85; font-weight: 600; }
+        .hero .n { font-size: 36px; font-weight: 800; letter-spacing: -0.035em; margin: 4px 0 18px; }
+        .hero .n small { font-size: 22px; }
+        .hero .meta { display: flex; gap: 0; font-size: 12px; }
+        .hero .meta div { flex: 1; opacity: .9; }
+        .hero .meta div + div { border-left: 1px solid rgba(255,255,255,.25); padding-left: 14px; }
+        .hero .meta b { display: block; font-size: 16px; margin-top: 3px; }
+
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+        .row:last-child { border-bottom: 0; padding-bottom: 2px; }
+        .row:first-child { padding-top: 2px; }
+        .who { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; min-width: 0; }
+        .who .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .arrow { color: var(--faint); font-size: 13px; flex-shrink: 0; }
+        .avatar { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0; }
+        .money { font-weight: 800; font-size: 16px; white-space: nowrap; }
+        .done { text-align: center; padding: 10px 0 4px; color: var(--sub); font-size: 14px; }
+
+        .seg { display: flex; background: var(--surface2); border-radius: 12px; padding: 3px; }
+        .seg button { flex: 1; border: 0; background: none; height: 32px; border-radius: 9px; font-size: 12px; font-weight: 600; color: var(--sub); }
+        .seg button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+        .note { font-size: 12px; color: var(--sub); margin-top: 12px; line-height: 1.5; }
+
+        .person { padding: 14px 0; border-bottom: 1px solid var(--line); }
+        .person:last-child { border-bottom: 0; padding-bottom: 2px; }
+        .person:first-child { padding-top: 2px; }
+        .bar { height: 6px; background: var(--surface2); border-radius: 3px; margin: 10px 0 8px; overflow: hidden; }
+        .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+        .detail { font-size: 12px; color: var(--sub); line-height: 1.7; }
+        .tag { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 7px; color: var(--pos); background: var(--pos-soft); white-space: nowrap; }
+
+        /* 지난 정산 */
+        .hist-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+        .hist-date { font-size: 12px; color: var(--sub); font-weight: 600; }
+        .hist-title { font-size: 16px; font-weight: 700; margin: 4px 0 2px; }
+        .hist-total { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; }
+        .hist-lines { font-size: 13px; color: var(--sub); margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); line-height: 1.8; }
+        .hist-actions { display: flex; gap: 6px; margin-top: 12px; }
+        .hist-actions .btn { height: 40px; font-size: 13px; border-radius: 12px; padding: 0 14px; }
+
+        .toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translate(-50%, 10px); background: rgba(25,31,40,.92); color: #fff;
+                 padding: 11px 18px; border-radius: 22px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity .25s, transform .25s; pointer-events: none; z-index: 10; white-space: nowrap; }
+        .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
         @media (max-width: 360px) {
-            body { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
-            .container { padding: 15px; border-radius: 16px; }
+            .app { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+            .card { padding: 16px; border-radius: 18px; }
+            h1 { font-size: 22px; }
+            .hero .n { font-size: 30px; }
         }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <div id="step1" class="step active">
-        <h2>
-            👥 참가자 등록
-            <button type="button" class="history-btn" onclick="showHistory()">📜 이전 기록</button>
-        </h2>
-
-        <div style="margin-bottom: 15px; min-height: 20px;">
-            <div style="font-size: 0.8rem; color: var(--sub); margin-bottom: 5px;">자주 함께하는 멤버 (이름 터치 = 추가, ✕ = 목록에서 삭제)</div>
-            <div id="dbMemberList"></div>
+<div class="app">
+    <header>
+        <div class="brand">
+            <div class="logo">1/N</div>
+            <div><b>1/N</b><small>스마트 정산</small></div>
         </div>
-
-        <form id="addMemberForm" style="display:flex; gap:8px; align-items:center;">
-            <input type="text" id="nameInput" placeholder="새로운 이름 직접 입력" autocomplete="off" enterkeyhint="done" maxlength="20">
-            <button type="submit" style="width:72px; flex-shrink:0; margin-top:0;">추가</button>
-        </form>
-
-        <div style="margin-top:15px; min-height:44px; padding: 10px; background: #f9f9f9; border-radius: 10px;">
-            <span class="muted">현재 참여자: </span>
-            <span id="memberList"></span>
-        </div>
-
-        <button id="nextBtn" class="btn-dark" onclick="nextStep(2)" style="display:none; margin-top:20px;">다음 단계 (차수 설정) ➔</button>
-    </div>
-
-    <div id="step2" class="step">
-        <h2>🍻 차수 설정</h2>
-        <div class="guide-text">총 몇 차까지 정산하시나요? (1~20)</div>
-        <form id="roundForm">
-            <input type="number" id="roundInput" placeholder="예: 2" inputmode="numeric" pattern="[0-9]*" min="1" max="20" enterkeyhint="next">
-            <button type="submit">세부 내역 입력 ➔</button>
-        </form>
-        <button type="button" class="btn-gray" onclick="nextStep(1)">← 참가자 수정</button>
-    </div>
-
-    <div id="step3" class="step">
-        <h2>💰 상세 내역 입력</h2>
-        <div id="roundContainer"></div>
-        <button onclick="calculateFinal()">최종 결과 확인 및 저장</button>
-        <button type="button" class="btn-gray" onclick="nextStep(2)">← 차수 수정</button>
-    </div>
-
-    <div id="step4" class="step">
-        <h2>📊 정산 결과</h2>
-        <div class="guide-text" style="background:#e8f8f5; border-left-color:#2ecc71;">✅ 결과가 이 기기에 자동 저장되었습니다.</div>
-        <div id="resultArea" style="background: #fff; border-radius:15px; border:1px solid #eee;"></div>
-        <button class="btn-green" onclick="shareResult()" style="margin-top:20px;">📤 결과 공유하기 (카톡 등)</button>
-        <button class="btn-gray" onclick="location.reload()">새로운 정산하기</button>
-    </div>
-
-    <div id="stepHistory" class="step">
-        <h2>📜 이전 정산 기록</h2>
-        <div id="historyContainer" style="margin-top: 15px;"></div>
-        <button class="btn-dark" onclick="nextStep(1)" style="margin-top:20px;">← 돌아가기</button>
-        <button onclick="clearHistory()" style="background:none; color:#e74c3c; font-size:0.9rem; margin-top:10px;">기록 전체 삭제</button>
-    </div>
+        <button class="pill" id="histBtn" data-act="history">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            지난 정산
+        </button>
+    </header>
+    <div class="stepper" id="stepper"></div>
+    <main id="view"></main>
 </div>
-
 <div id="toast" class="toast"></div>
 
 <script>
-    let members = [];
-    let lastShareText = '';
+/* ===== 저장소 ===== */
+const K = { members: 'dutch_members', history: 'dutch_history', draft: 'dutch_draft_v2', account: 'dutch_account' };
+const load = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
 
-    /* --- 공통 유틸 --- */
-    // 이름에 <, & 등이 들어가도 화면이 깨지지 않도록 처리
-    function esc(s) {
-        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-    // 사파리 개인정보 보호 모드 등에서 저장소가 막혀도 앱이 멈추지 않도록 처리
-    function load(key) {
-        try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; }
-    }
-    function save(key, value) {
-        try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { toast('이 브라우저에서는 저장이 되지 않습니다'); }
-    }
-    function toast(msg) {
-        const t = document.getElementById('toast');
-        t.textContent = msg;
-        t.classList.add('show');
-        clearTimeout(t._timer);
-        t._timer = setTimeout(() => t.classList.remove('show'), 2000);
-    }
-    const won = n => Math.round(n).toLocaleString('ko-KR') + '원';
+/* ===== 유틸 ===== */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = n => Math.round(n).toLocaleString('ko-KR');
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const roundUp = (x, u) => u === 1 ? Math.round(x) : Math.ceil(x / u - 1e-9) * u;
+const COLORS = ['#3B5BFD', '#0CA678', '#F59F00', '#E64980', '#7048E8', '#1098AD', '#F76707', '#4C6EF5'];
+const color = n => { let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) >>> 0; return COLORS[h % COLORS.length]; };
+const avatar = n => `<span class="avatar" style="background:${color(n)}">${esc([...n][0] || '?')}</span>`;
+const dateLabel = ts => new Date(ts).toLocaleString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit' });
+const roundLabel = (r, i) => `${i + 1}차` + (r.place ? ` ${r.place}` : '');
 
-    document.addEventListener('DOMContentLoaded', loadSavedMembers);
+function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 2000);
+}
 
-    /* --- 저장된 멤버 --- */
-    function saveMemberToDB(name) {
-        const db = load('dutch_members');
-        if (!db.includes(name)) { db.push(name); save('dutch_members', db); }
-    }
+/* ===== 상태 ===== */
+const fresh = () => ({ id: uid(), screen: 'people', prev: 'people', members: [], rounds: [], unit: 1 });
+let S = load(K.draft, null) || fresh();
+let editRecent = false;
+const persist = () => store(K.draft, S);
 
-    function deleteMemberFromDB(name) {
-        if (!confirm(`'${name}'을(를) 자주 함께하는 멤버에서 지울까요?`)) return;
-        save('dutch_members', load('dutch_members').filter(n => n !== name));
-        loadSavedMembers();
-    }
+function newRound() {
+    const last = S.rounds[S.rounds.length - 1];
+    return { id: uid(), place: '', amount: 0, payer: (last && last.payer) || S.members[0] || '', attendees: [...S.members] };
+}
 
-    function loadSavedMembers() {
-        const db = load('dutch_members');
-        const list = document.getElementById('dbMemberList');
-        list.innerHTML = '';
+/* ===== 핵심 계산: 각자 부담액 + 최소 송금 ===== */
+function compute() {
+    const share = {}, paid = {}, detail = {};
+    S.members.forEach(m => { share[m] = 0; paid[m] = 0; detail[m] = []; });
+    let total = 0, count = 0;
 
-        if (db.length === 0) {
-            list.innerHTML = '<span class="muted">저장된 멤버가 없습니다.</span>';
-            return;
-        }
-
-        db.forEach(name => {
-            const chip = document.createElement('span');
-            chip.className = 'recent-member' + (members.includes(name) ? ' added' : '');
-            const add = document.createElement('span');
-            add.className = 'add';
-            add.textContent = '+ ' + name;
-            add.onclick = () => processAddingMember(name);
-            const del = document.createElement('span');
-            del.className = 'del';
-            del.textContent = '✕';
-            del.onclick = () => deleteMemberFromDB(name);
-            chip.append(add, del);
-            list.appendChild(chip);
-        });
-    }
-
-    /* --- 참여자 추가/삭제 --- */
-    document.getElementById('addMemberForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        const input = document.getElementById('nameInput');
-        const name = input.value.trim();
-        if (!name) return;
-        if (members.includes(name)) toast('이미 추가된 이름입니다');
-        processAddingMember(name);
-        input.value = '';
-        input.focus(); // 연속 입력 편하게 키보드 유지
+    S.rounds.forEach((r, i) => {
+        const att = r.attendees.filter(a => S.members.includes(a));
+        if (!r.amount || !att.length) return;
+        total += r.amount; count++;
+        const per = r.amount / att.length;
+        att.forEach(a => { share[a] += per; detail[a].push({ label: roundLabel(r, i), amt: per }); });
+        if (S.members.includes(r.payer)) paid[r.payer] += r.amount;
     });
 
-    function processAddingMember(name) {
-        if (!name || members.includes(name)) return;
-        members.push(name);
-        saveMemberToDB(name);
-        renderMembers();
-    }
-
-    function removeMember(name) {
-        members = members.filter(m => m !== name);
-        renderMembers();
-    }
-
-    function renderMembers() {
-        const list = document.getElementById('memberList');
-        list.innerHTML = '';
-        members.forEach(name => {
-            const tag = document.createElement('span');
-            tag.className = 'member-tag';
-            tag.appendChild(document.createTextNode(name));
-            const x = document.createElement('span');
-            x.className = 'x';
-            x.textContent = '✕';
-            x.onclick = () => removeMember(name);
-            tag.appendChild(x);
-            list.appendChild(tag);
-        });
-        document.getElementById('nextBtn').style.display = members.length > 0 ? 'block' : 'none';
-        loadSavedMembers();
-    }
-
-    /* --- 스텝 이동 --- */
-    function nextStep(n) {
-        if (document.activeElement) document.activeElement.blur(); // 키보드 닫기
-        document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-        if (n === 'history') {
-            document.getElementById('stepHistory').classList.add('active');
-            renderHistory();
-        } else {
-            document.getElementById('step' + n).classList.add('active');
-        }
-        window.scrollTo(0, 0);
-    }
-
-    /* --- 2, 3단계 --- */
-    document.getElementById('roundForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        setupRounds();
+    // 낸 돈 - 써야 할 돈 = +면 받을 사람, -면 보낼 사람
+    const debtors = [], creditors = [];
+    S.members.forEach(m => {
+        const v = paid[m] - share[m];
+        if (v < -0.5) debtors.push({ m, v: -v });
+        else if (v > 0.5) creditors.push({ m, v });
     });
+    debtors.sort((a, b) => b.v - a.v);
+    creditors.sort((a, b) => b.v - a.v);
 
-    function setupRounds() {
-        const count = parseInt(document.getElementById('roundInput').value, 10);
-        if (!count || count < 1 || count > 20) return alert('차수를 1~20 사이로 입력해주세요.');
-
-        // 이미 입력해 둔 값은 차수를 다시 설정해도 유지
-        const prev = Array.from(document.querySelectorAll('.round-card')).map(card => ({
-            note: card.querySelector('.r-note').value,
-            amount: card.querySelector('.r-amount').value,
-            checked: Array.from(card.querySelectorAll('.r-check:checked')).map(c => c.value)
-        }));
-
-        let html = '';
-        for (let i = 1; i <= count; i++) {
-            const p = prev[i - 1];
-            html += `
-                <div class="round-card">
-                    <strong>📍 ${i}차 정보</strong>
-                    <input type="text" class="r-note" placeholder="장소/항목 (예: 고깃집, 카페)" value="${p ? esc(p.note) : ''}" enterkeyhint="next">
-                    <input type="number" class="r-amount" placeholder="총 금액 (원)" inputmode="numeric" pattern="[0-9]*" min="0" value="${p ? esc(p.amount) : ''}" enterkeyhint="done">
-                    <div class="attendee-grid">
-                        ${members.map(m => `
-                            <label class="check-label">
-                                <input type="checkbox" class="r-check" value="${esc(m)}" ${!p || p.checked.includes(m) ? 'checked' : ''}> ${esc(m)}
-                            </label>
-                        `).join('')}
-                    </div>
-                </div>`;
-        }
-        document.getElementById('roundContainer').innerHTML = html;
-        nextStep(3);
+    // 큰 금액끼리 먼저 맞춰서 송금 횟수를 최소화
+    const transfers = [];
+    let i = 0, j = 0;
+    while (i < debtors.length && j < creditors.length) {
+        const amt = Math.min(debtors[i].v, creditors[j].v);
+        transfers.push({ from: debtors[i].m, to: creditors[j].m, amt });
+        debtors[i].v -= amt; creditors[j].v -= amt;
+        if (debtors[i].v < 0.5) i++;
+        if (creditors[j].v < 0.5) j++;
     }
+    return { total, count, share, paid, detail, transfers };
+}
 
-    /* --- 4단계: 계산 및 저장 --- */
-    function calculateFinal() {
-        const personalTotal = {};
-        const personalDetails = {};
-        let totalAmountSpent = 0;
+/* ===== 화면 ===== */
+const STEPS = [['people', '멤버'], ['rounds', '지출'], ['result', '정산']];
 
-        members.forEach(m => { personalTotal[m] = 0; personalDetails[m] = []; });
+function go(screen) {
+    if (document.activeElement) document.activeElement.blur();
+    if (screen === 'history') S.prev = S.screen;
+    S.screen = screen;
+    persist();
+    render();
+    window.scrollTo(0, 0);
+}
 
-        document.querySelectorAll('.round-card').forEach((card, idx) => {
-            const note = card.querySelector('.r-note').value.trim() || `${idx + 1}차`;
-            const amount = parseFloat(card.querySelector('.r-amount').value) || 0;
-            const attendees = Array.from(card.querySelectorAll('.r-check:checked')).map(c => c.value);
+function render() {
+    const idx = STEPS.findIndex(s => s[0] === S.screen);
+    const stepper = document.getElementById('stepper');
+    stepper.className = 'stepper' + (idx < 0 ? ' hide' : '');
+    stepper.innerHTML = STEPS.map((s, k) => `<div class="${k <= idx ? 'on' : ''}"><i></i><span>${k + 1}. ${s[1]}</span></div>`).join('');
+    document.getElementById('histBtn').style.visibility = S.screen === 'history' ? 'hidden' : 'visible';
 
-            if (attendees.length > 0 && amount > 0) {
-                totalAmountSpent += amount;
-                const perPerson = amount / attendees.length;
-                attendees.forEach(a => {
-                    personalTotal[a] += perPerson;
-                    personalDetails[a].push(`${note}:${won(perPerson)}`);
-                });
-            }
-        });
+    const view = document.getElementById('view');
+    view.innerHTML = VIEWS[S.screen]();
+    // 화면이 바뀔 때만 등장 애니메이션 (칩 탭할 때 깜빡임 방지)
+    if (lastScreen !== S.screen) { view.style.animation = 'none'; view.offsetHeight; view.style.animation = ''; }
+    lastScreen = S.screen;
+}
+let lastScreen = null;
 
-        if (totalAmountSpent <= 0) return alert('금액을 하나 이상 입력하고, 참석자를 체크해주세요.');
+const VIEWS = {
+    /* 1. 멤버 */
+    people() {
+        const recent = load(K.members, []).filter(n => !S.members.includes(n));
+        const n = S.members.length;
+        return `
+        <h1>누구와 함께했나요?</h1>
+        <p class="lead">한 번 추가한 이름은 기억해 두었다가 다음에 바로 불러올게요.</p>
 
-        const record = {
-            date: new Date().toLocaleString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
-            totalSpent: totalAmountSpent,
-            results: []
-        };
-
-        let html = `<div class="total-line"><span>총 사용 금액</span><span>${won(totalAmountSpent)}</span></div>`;
-        const lines = [`💸 더치페이 정산 (${record.date})`, `총 ${won(totalAmountSpent)}`, ''];
-
-        members.forEach(m => {
-            const total = Math.round(personalTotal[m]);
-            const detailStr = personalDetails[m].length > 0 ? `(${personalDetails[m].join(' + ')})` : '(참여 없음)';
-            if (total > 0) {
-                record.results.push({ name: m, total: total, detail: detailStr });
-                lines.push(`${m}: ${won(total)} ${detailStr}`);
-            }
-            html += `
-                <div class="result-item">
-                    <div style="display:flex; justify-content:space-between; gap:10px;">
-                        <strong>${esc(m)}</strong>
-                        <span style="color:var(--primary); font-weight:bold; white-space:nowrap;">${won(total)}</span>
-                    </div>
-                    <span class="calc-detail">${esc(detailStr)}</span>
-                </div>`;
-        });
-
-        document.getElementById('resultArea').innerHTML = html;
-        lastShareText = lines.join('\n');
-
-        const history = load('dutch_history');
-        history.unshift(record);
-        save('dutch_history', history);
-
-        nextStep(4);
-    }
-
-    /* --- 결과 공유 (모바일 공유 시트 → 안 되면 복사) --- */
-    async function shareResult() {
-        if (navigator.share) {
-            try { await navigator.share({ title: '더치페이 정산 결과', text: lastShareText }); return; }
-            catch (e) { if (e.name === 'AbortError') return; }
-        }
-        try {
-            await navigator.clipboard.writeText(lastShareText);
-            toast('결과가 복사되었습니다. 카톡에 붙여넣기 하세요');
-        } catch (e) {
-            const ta = document.createElement('textarea');
-            ta.value = lastShareText;
-            ta.style.position = 'fixed'; ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            ta.remove();
-            toast('결과가 복사되었습니다');
-        }
-    }
-
-    /* --- 히스토리 --- */
-    function showHistory() { nextStep('history'); }
-
-    function renderHistory() {
-        const container = document.getElementById('historyContainer');
-        const history = load('dutch_history');
-
-        if (history.length === 0) {
-            container.innerHTML = '<p style="text-align:center; color:#888;">저장된 기록이 없습니다.</p>';
-            return;
-        }
-
-        container.innerHTML = history.map(record => `
-            <div class="history-card">
-                <div class="history-date">🕒 ${esc(record.date)} (총 ${won(record.totalSpent)})</div>
-                ${record.results.map(r => `
-                    <div style="display:flex; justify-content:space-between; font-size:14px; margin-top:5px;">
-                        <span>${esc(r.name)}</span>
-                        <strong>${won(r.total)}</strong>
-                    </div>
-                `).join('')}
+        <div class="card">
+            <form class="field" data-form="add">
+                <input class="text" id="nameInput" placeholder="이름 입력" maxlength="12" autocomplete="off" enterkeyhint="done">
+                <button class="btn sm" type="submit">추가</button>
+            </form>
+            <div class="label" style="margin-top:20px">이번 모임 <span class="count">${n}명</span></div>
+            <div class="chips">
+                ${n ? S.members.map(m => `<button class="chip on" data-act="rm" data-name="${esc(m)}">${esc(m)}<span class="x">✕</span></button>`).join('')
+                    : '<div class="empty">아직 아무도 없어요</div>'}
             </div>
-        `).join('');
-    }
+        </div>
 
-    function clearHistory() {
-        if (confirm('정말 모든 정산 기록을 삭제하시겠습니까? (멤버 목록은 유지됩니다)')) {
-            try { localStorage.removeItem('dutch_history'); } catch (e) {}
-            renderHistory();
-        }
+        ${recent.length ? `
+        <div class="card">
+            <div class="label">최근 함께한 사람
+                <span>
+                    ${!editRecent && recent.length > 1 ? `<button class="linkbtn" data-act="add-all">모두 추가</button> · ` : ''}
+                    <button class="linkbtn ${editRecent ? '' : 'muted'}" data-act="edit-recent">${editRecent ? '완료' : '편집'}</button>
+                </span>
+            </div>
+            <div class="chips">
+                ${recent.map(r => editRecent
+                    ? `<button class="chip off" data-act="forget" data-name="${esc(r)}">${esc(r)}<span class="x">✕</span></button>`
+                    : `<button class="chip soft" data-act="add" data-name="${esc(r)}">+ ${esc(r)}</button>`).join('')}
+            </div>
+        </div>` : ''}
+
+        <div class="cta">
+            <button class="btn block" data-act="go" data-to="rounds" ${n < 2 ? 'disabled' : ''}>${n < 2 ? '2명 이상 추가해주세요' : `${n}명으로 시작하기`}</button>
+        </div>`;
+    },
+
+    /* 2. 지출 */
+    rounds() {
+        if (!S.rounds.length) { S.rounds.push(newRound()); persist(); }
+        const c = compute();
+        return `
+        <h1>어디서 얼마 썼나요?</h1>
+        <p class="lead">결제한 사람만 골라주면, 누가 누구에게 얼마 보낼지 알아서 계산해요.</p>
+        ${S.rounds.map(roundCard).join('')}
+        <button class="btn soft block" data-act="add-round" style="margin-top:4px">+ ${S.rounds.length + 1}차 추가</button>
+        <div class="cta">
+            <button class="btn ghost" data-act="go" data-to="people">이전</button>
+            <button class="btn" data-act="to-result" id="calcBtn">${calcLabel(c.total)}</button>
+        </div>`;
+    },
+
+    /* 3. 정산 결과 */
+    result() {
+        const c = compute(), u = S.unit, n = S.members.length;
+        const places = S.rounds.filter(r => r.amount).map(r => r.place).filter(Boolean);
+        const max = Math.max(...S.members.map(m => c.share[m]), 1);
+        const account = load(K.account, '');
+        const rec = load(K.history, []).find(h => h.id === S.id);
+        return `
+        <h1>정산이 끝났어요</h1>
+        <p class="lead">${esc(dateLabel(rec ? rec.ts : Date.now()))}${places.length ? ' · ' + esc(places.join(' → ')) : ''}
+            · <button class="linkbtn" data-act="go" data-to="rounds">수정</button></p>
+
+        <div class="hero">
+            <div class="t">총 지출</div>
+            <div class="n">${fmt(c.total)}<small>원</small></div>
+            <div class="meta">
+                <div>인원<b>${n}명</b></div>
+                <div>차수<b>${c.count}차</b></div>
+                <div>1인 평균<b>${fmt(roundUp(c.total / n, u))}원</b></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="label">이렇게 보내면 끝 <span class="count">${c.transfers.length ? `송금 ${c.transfers.length}건` : ''}</span></div>
+            ${c.transfers.length ? c.transfers.map(t => `
+                <div class="row">
+                    <div class="who">${avatar(t.from)}<span class="nm">${esc(t.from)}</span><span class="arrow">→</span>${avatar(t.to)}<span class="nm">${esc(t.to)}</span></div>
+                    <div class="money">${fmt(roundUp(t.amt, u))}원</div>
+                </div>`).join('')
+                : '<div class="done">🎉 주고받을 돈이 없어요</div>'}
+            <div class="label" style="margin:18px 0 8px">금액 단위 (올림)</div>
+            <div class="seg">
+                ${[1, 10, 100, 1000].map(v => `<button class="${u === v ? 'on' : ''}" data-act="unit" data-u="${v}">${v === 1 ? '1원' : fmt(v) + '원'}</button>`).join('')}
+            </div>
+            ${u > 1 ? `<div class="note">보낼 금액을 ${fmt(u)}원 단위로 올렸어요. 남는 몇 원은 결제한 사람 몫이에요.</div>` : ''}
+        </div>
+
+        <div class="card">
+            <div class="label">받을 계좌 <span style="font-weight:500">공유할 때 함께 보내져요 (선택)</span></div>
+            <input class="text" id="accountInput" placeholder="예: 카카오뱅크 3333-00-0000000 홍길동" value="${esc(account)}" maxlength="50" autocomplete="off" enterkeyhint="done">
+        </div>
+
+        <div class="card">
+            <div class="label">개인별 부담액</div>
+            ${S.members.map(m => `
+                <div class="person">
+                    <div class="row" style="padding:0;border:0">
+                        <div class="who">${avatar(m)}<span class="nm">${esc(m)}</span>${c.paid[m] > 0 ? `<span class="tag">${fmt(c.paid[m])}원 결제</span>` : ''}</div>
+                        <div class="money">${fmt(roundUp(c.share[m], u))}원</div>
+                    </div>
+                    <div class="bar"><i style="width:${(c.share[m] / max * 100).toFixed(1)}%"></i></div>
+                    <div class="detail">${c.detail[m].length ? c.detail[m].map(d => `${esc(d.label)} ${fmt(d.amt)}원`).join(' · ') : '참여 없음'}</div>
+                </div>`).join('')}
+        </div>
+
+        <div class="cta">
+            <button class="btn ghost" data-act="new">새 정산</button>
+            <button class="btn" data-act="share">결과 공유하기</button>
+        </div>`;
+    },
+
+    /* 지난 정산 */
+    history() {
+        const list = load(K.history, []);
+        return `
+        <h1>지난 정산</h1>
+        <p class="lead">이 기기에만 저장돼요. 기록을 열어서 다시 수정할 수도 있어요.</p>
+        ${list.length ? list.map(h => {
+            const isNew = !!h.rounds;   // 예전 버전 기록은 결과만 있음
+            const title = isNew ? (h.rounds.filter(r => r.amount).map(r => r.place).filter(Boolean).join(' → ') || `${h.members.length}명 정산`) : '정산 기록';
+            const lines = isNew
+                ? (h.transfers.length ? h.transfers.map(t => `${esc(t.from)} → ${esc(t.to)} <b>${fmt(t.amt)}원</b>`).join('<br>') : '주고받을 돈 없음')
+                : (h.results || []).map(r => `${esc(r.name)} <b>${fmt(r.total)}원</b>`).join('<br>');
+            return `
+            <div class="card">
+                <div class="hist-top">
+                    <div>
+                        <div class="hist-date">${esc(h.ts ? dateLabel(h.ts) : h.date)}</div>
+                        <div class="hist-title">${esc(title)}</div>
+                    </div>
+                    <div class="hist-total">${fmt(h.total != null ? h.total : h.totalSpent)}원</div>
+                </div>
+                <div class="hist-lines">${lines}</div>
+                <div class="hist-actions">
+                    ${isNew ? `<button class="btn soft" data-act="open" data-id="${esc(h.id)}">열기</button>` : ''}
+                    <button class="btn soft" data-act="del-rec" data-id="${esc(h.id || '')}" data-ix="${list.indexOf(h)}" style="color:var(--sub)">삭제</button>
+                </div>
+            </div>`;
+        }).join('') : '<div class="card"><div class="done">아직 정산 기록이 없어요</div></div>'}
+        <div class="cta">
+            ${list.length ? '<button class="btn ghost" data-act="clear">전체 삭제</button>' : ''}
+            <button class="btn" data-act="back">돌아가기</button>
+        </div>`;
     }
+};
+
+function calcLabel(total) { return total ? `${fmt(total)}원 정산하기` : '정산하기'; }
+
+function perText(r) {
+    const n = r.attendees.length;
+    return r.amount && n ? `<span>${n}명이 나눠서</span><span>1인당 <b>${fmt(r.amount / n)}원</b></span>` : '';
+}
+
+function roundCard(r, i) {
+    const n = r.attendees.length, all = S.members.length;
+    return `
+    <div class="card" data-round="${r.id}">
+        <div class="round-head">
+            <span class="badge">${i + 1}차</span>
+            ${S.rounds.length > 1 ? `<button class="linkbtn muted" data-act="del-round" data-id="${r.id}">삭제</button>` : ''}
+        </div>
+        <input class="text" data-field="place" data-id="${r.id}" placeholder="어디였나요? (예: 삼겹살집)" value="${esc(r.place)}" maxlength="20" autocomplete="off" enterkeyhint="next">
+        <div class="amount-wrap">
+            <input class="amount" data-field="amount" data-id="${r.id}" inputmode="numeric" pattern="[0-9]*" placeholder="0" value="${r.amount ? fmt(r.amount) : ''}" autocomplete="off" enterkeyhint="done">
+            <span>원</span>
+        </div>
+        <div class="sub-label">결제한 사람</div>
+        <div class="chips">
+            ${S.members.map(m => `<button class="chip ${r.payer === m ? 'on' : ''}" data-act="payer" data-id="${r.id}" data-name="${esc(m)}">${esc(m)}</button>`).join('')}
+        </div>
+        <div class="sub-label">함께한 사람 · ${n}/${all}명
+            <button class="linkbtn" data-act="all" data-id="${r.id}">${n === all ? '전체 해제' : '전체 선택'}</button>
+        </div>
+        <div class="chips">
+            ${S.members.map(m => {
+                const on = r.attendees.includes(m);
+                return `<button class="chip ${on ? 'soft' : 'off'}" data-act="att" data-id="${r.id}" data-name="${esc(m)}">${on ? '✓ ' : ''}${esc(m)}</button>`;
+            }).join('')}
+        </div>
+        <div class="per" data-per="${r.id}">${perText(r)}</div>
+    </div>`;
+}
+
+/* ===== 동작 ===== */
+function addMember(name) {
+    name = (name || '').trim();
+    if (!name || S.members.includes(name)) return false;
+    S.members.push(name);
+    S.rounds.forEach(r => { r.attendees.push(name); if (!r.payer) r.payer = name; });
+    const db = load(K.members, []);
+    if (!db.includes(name)) { db.push(name); store(K.members, db); }
+    persist();
+    return true;
+}
+
+function removeMember(name) {
+    S.members = S.members.filter(m => m !== name);
+    S.rounds.forEach(r => {
+        r.attendees = r.attendees.filter(a => a !== name);
+        if (r.payer === name) r.payer = S.members[0] || '';
+    });
+    persist();
+}
+
+function saveRecord() {
+    const c = compute();
+    const list = load(K.history, []);
+    const old = list.find(h => h.id === S.id);
+    const rec = {
+        id: S.id, ts: old ? old.ts : Date.now(), total: c.total, unit: S.unit,
+        members: [...S.members], rounds: JSON.parse(JSON.stringify(S.rounds)),
+        transfers: c.transfers.map(t => ({ from: t.from, to: t.to, amt: roundUp(t.amt, S.unit) }))
+    };
+    store(K.history, old ? list.map(h => h.id === S.id ? rec : h) : [rec, ...list]);
+}
+
+function toResult() {
+    const filled = S.rounds.filter(r => r.amount > 0);
+    if (!filled.length) return toast('금액을 입력해주세요');
+    if (filled.some(r => !r.attendees.length)) return toast('함께한 사람을 선택해주세요');
+    if (filled.some(r => !S.members.includes(r.payer))) return toast('결제한 사람을 선택해주세요');
+    saveRecord();
+    go('result');
+}
+
+function newSession() {
+    if (!confirm('새로 정산을 시작할까요?\n지금 정산은 지난 정산에 저장되어 있어요.')) return;
+    S = fresh();
+    persist();
+    go('people');
+}
+
+async function share() {
+    const c = compute(), u = S.unit;
+    const account = load(K.account, '').trim();
+    const places = S.rounds.filter(r => r.amount).map(r => r.place).filter(Boolean);
+    const lines = [
+        `[1/N 정산] ${dateLabel(Date.now())}`,
+        places.length ? places.join(' → ') : null,
+        `총 ${fmt(c.total)}원 · ${S.members.length}명`,
+        '',
+        '💸 송금 안내',
+        ...(c.transfers.length ? c.transfers.map(t => `${t.from} → ${t.to}  ${fmt(roundUp(t.amt, u))}원`) : ['주고받을 돈이 없어요']),
+        account ? `\n💳 ${account}` : null,
+        '',
+        '👤 개인별 부담',
+        ...S.members.map(m => `${m}  ${fmt(roundUp(c.share[m], u))}원`)
+    ];
+    if (/^https?:/.test(location.href)) lines.push('', `계산기 👉 ${location.origin}${location.pathname}`);
+    const text = lines.filter(l => l !== null).join('\n');
+
+    if (navigator.share) {
+        try { await navigator.share({ text }); return; }
+        catch (e) { if (e.name === 'AbortError') return; }
+    }
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    }
+    toast('복사했어요. 카톡에 붙여넣기 하세요');
+}
+
+/* ===== 이벤트 ===== */
+document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const { act, name, id, to } = b.dataset;
+    const r = id && S.rounds.find(x => x.id === id);
+
+    switch (act) {
+        case 'history': go('history'); break;
+        case 'back': go(S.prev && S.prev !== 'history' ? S.prev : 'people'); break;
+        case 'go': go(to); break;
+        case 'add': addMember(name); render(); break;
+        case 'add-all': load(K.members, []).forEach(addMember); render(); break;
+        case 'rm': removeMember(name); render(); break;
+        case 'edit-recent': editRecent = !editRecent; render(); break;
+        case 'forget':
+            store(K.members, load(K.members, []).filter(n => n !== name));
+            if (!load(K.members, []).some(n => !S.members.includes(n))) editRecent = false;
+            render(); break;
+        case 'add-round':
+            S.rounds.push(newRound()); persist(); render();
+            const cards = document.querySelectorAll('[data-round]');
+            cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            break;
+        case 'del-round': S.rounds = S.rounds.filter(x => x !== r); persist(); render(); break;
+        case 'payer': r.payer = name; persist(); render(); break;
+        case 'att':
+            r.attendees = r.attendees.includes(name) ? r.attendees.filter(a => a !== name) : S.members.filter(m => m === name || r.attendees.includes(m));
+            persist(); render(); break;
+        case 'all': r.attendees = r.attendees.length === S.members.length ? [] : [...S.members]; persist(); render(); break;
+        case 'to-result': toResult(); break;
+        case 'unit': S.unit = +b.dataset.u; persist(); saveRecord(); render(); break;
+        case 'share': share(); break;
+        case 'new': newSession(); break;
+        case 'open': {
+            const h = load(K.history, []).find(x => x.id === id);
+            if (!h) break;
+            S = { id: h.id, screen: 'result', prev: 'people', members: [...h.members], rounds: h.rounds, unit: h.unit || 1 };
+            go('result'); break;
+        }
+        case 'del-rec':
+            if (!confirm('이 기록을 삭제할까요?')) break;
+            store(K.history, load(K.history, []).filter((h, k) => id ? h.id !== id : k !== +b.dataset.ix));
+            render(); break;
+        case 'clear':
+            if (!confirm('모든 정산 기록을 삭제할까요?\n(최근 함께한 사람 목록은 남아요)')) break;
+            store(K.history, []); render(); break;
+    }
+});
+
+document.addEventListener('submit', e => {
+    e.preventDefault();
+    const input = document.getElementById('nameInput');
+    const name = input.value.trim();
+    if (!name) return;
+    if (S.members.includes(name)) { toast('이미 추가된 이름이에요'); input.select(); return; }
+    addMember(name);
+    render();
+    document.getElementById('nameInput').focus(); // 연속 입력을 위해 키보드 유지
+});
+
+document.addEventListener('input', e => {
+    const el = e.target;
+    if (el.id === 'accountInput') { store(K.account, el.value); return; }
+    const r = el.dataset.id && S.rounds.find(x => x.id === el.dataset.id);
+    if (!r) return;
+    if (el.dataset.field === 'place') r.place = el.value;
+    if (el.dataset.field === 'amount') {
+        const digits = el.value.replace(/\D/g, '').replace(/^0+/, '').slice(0, 10);
+        r.amount = +digits || 0;
+        el.value = digits ? fmt(r.amount) : '';
+        document.querySelector(`[data-per="${r.id}"]`).innerHTML = perText(r);
+        document.getElementById('calcBtn').textContent = calcLabel(compute().total);
+    }
+    persist();
+});
+
+// 키보드의 '다음'/'완료' 버튼 처리
+document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !e.target.dataset.field) return;
+    e.preventDefault();
+    if (e.target.dataset.field === 'place') e.target.closest('.card').querySelector('.amount').focus();
+    else e.target.blur();
+});
+
+/* ===== 시작 ===== */
+if (!VIEWS[S.screen] || (S.screen === 'result' && !compute().total)) S.screen = S.members.length ? 'rounds' : 'people';
+render();
 </script>
 </body>
 </html>
